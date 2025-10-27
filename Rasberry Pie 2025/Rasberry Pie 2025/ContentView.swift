@@ -37,15 +37,19 @@ struct ContentView: View {
 import SwiftUI
 
 struct CreateAccountView: View {
-    @State private var email: String = ""
+    @State public var email: String = ""
+    @State private var password: String = ""
+    @State private var passwordConfirmation: String = ""
     @State private var showEmailError: Bool = false
-    @State private var isLoading: Bool = false
+    @State public var isLoading: Bool = false
+    @State public var emailIsThere: Bool = false
     
     var body: some View {
+        
         VStack {
             Spacer().frame(height: 32)
             
-            // Logo
+            
             Image("sensecap_logo")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -60,7 +64,7 @@ struct CreateAccountView: View {
             
             Spacer().frame(height: 24)
             
-            // Title & subtitle
+            
             VStack(spacing: 6) {
                 Text("Create an account")
                     .font(.system(size: 22, weight: .bold))
@@ -75,14 +79,14 @@ struct CreateAccountView: View {
             
             Spacer().frame(height: 20)
             
-            // Email field + Continue button
+            
             VStack(spacing: 12) {
-                // Email field
-                TextField("email@domain.com", text: $email, onEditingChanged: { _ in
+              
+                TextField("Enter your email address", text: $email, onEditingChanged: { _ in
                     self.showEmailError = false
                 })
                 .keyboardType(.emailAddress)
-                .autocapitalization(.none)
+                .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .padding(14)
                 .background(
@@ -105,7 +109,50 @@ struct CreateAccountView: View {
                     }
                 )
                 .accessibilityLabel("Email")
-                
+                VStack(spacing: 12) {
+                    if !email.isEmpty {
+                        SecureField("Enter your password)", text: $password)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color(white: 0.9), lineWidth: 1)
+                                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.98)))
+                            )
+                    }
+                }
+                VStack(spacing: 12) {
+                    if !email.isEmpty && !password.isEmpty {
+                        SecureField("Confirm your password", text: $passwordConfirmation)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [2]))
+                                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.98)))
+                            )
+                    }
+                }
+                VStack(spacing: 12) {
+                    if !email.isEmpty && !password.isEmpty && !passwordConfirmation.isEmpty  {
+                        Text("Password must contain 1 uppercase, 1 lowercase, 1 digit")
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                        Text("and 1 symbol and be at least 8 characters long")
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                    }
+                }
+                VStack(spacing: 12) {
+                    if !email.isEmpty && !password.isEmpty && !passwordConfirmation.isEmpty {
+                        Text("By creating an account, you agree to our")
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                        Link("Terms of Service", destination: URL(string: "https://example.com/terms")!)
+                    }
+                }
                 // Continue button
                 Button(action: {
                     attemptContinue()
@@ -144,10 +191,10 @@ struct CreateAccountView: View {
             // Social sign-in buttons
             VStack(spacing: 12) {
                 Button(action: {
-                    // Google sign-in action
+                    
                 }) {
                     HStack {
-                        Image(systemName: "globe") // placeholder, replace with Google logo asset if you have one
+                        Image("google_logo")
                             .resizable()
                             .frame(width: 20, height: 20)
                             .padding(.leading, 10)
@@ -193,13 +240,16 @@ struct CreateAccountView: View {
         }
         .ignoresSafeArea(edges: .bottom)
         .background(Color.white.ignoresSafeArea())
+        .onChange(of: email) { _, newValue in
+            emailIsThere = !newValue.isEmpty
+        }
     }
     
     // MARK: - Actions
     
     private func attemptContinue() {
         // Basic email validation
-        if isValidEmail(email) {
+        if isValidEmail(email) && isValidPassword(password) && password == passwordConfirmation {
             showEmailError = false
             isLoading = true
             // Simulate network delay
@@ -219,6 +269,13 @@ struct CreateAccountView: View {
         let regex = "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$"
         return NSPredicate(format: "SELF MATCHES[c] %@", regex).evaluate(with: string)
     }
+}
+func isValidPassword(_ password: String) -> Bool {
+
+    let passwordRegex = "^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,16}$"
+    
+    return NSPredicate(format: "SELF MATCHES %@", passwordRegex)
+        .evaluate(with: password)
 }
 
 // MARK: - Button Styles
@@ -265,3 +322,4 @@ struct CreateAccountView_Previews: PreviewProvider {
         }
     }
 }
+
