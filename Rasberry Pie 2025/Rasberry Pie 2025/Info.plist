@@ -2,9 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
+	<key>CFBundleURLTypes</key>
 	<array>
-		<string>remote-notification</string>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>googleLogin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.6000331908-kahjqjkl25tbqlcr97cd2q4qq93nlutf</string>
+			</array>
+		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>6000331908-kahjqjkl25tbqlcr97cd2q4qq93nlutf.apps.googleusercontent.com</string>
 </dict>
 </plist>

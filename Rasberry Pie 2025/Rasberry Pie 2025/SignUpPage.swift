@@ -7,48 +7,25 @@
 
 import SwiftUI
 import SwiftData
-/*
-struct ContentView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            // Top-centered logo
-            Image("Logo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 64, height: 64) // adjust size
-                .padding(.top, 12)
-
-            // Main content
-            Text("Welcome to Rasberry Pie 2025 SenseCap")
-                .foregroundStyle(.secondary)
-
-            Spacer() // pushes content up so the logo stays at top
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top) // pin stack to top
-        .padding(.horizontal)
-    }
-}
-*/
-
-// CreateAccountView.swift
-// SenseCap - Signup Screen (SwiftUI)
-// Drop an image asset named "sensecap_logo" into Assets.xcassets
-
-import SwiftUI
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
+#if canImport(Firebase)
+import Firebase
+#endif
 
 struct CreateAccountView: View {
     @State public var email: String = ""
-    @State private var password: String = ""
-    @State private var passwordConfirmation: String = ""
-    @State private var showEmailError: Bool = false
+    @State public var password: String = ""
+    @State public var passwordConfirmation: String = ""
+    @State public var showEmailError: Bool = false
     @State public var isLoading: Bool = false
     @State public var emailIsThere: Bool = false
-    
+    @State public var LoggedIn: Bool = false
     var body: some View {
-        
+        NavigationStack {
         VStack {
             Spacer().frame(height: 32)
-            
             
             Image("sensecap_logo")
                 .resizable()
@@ -111,7 +88,7 @@ struct CreateAccountView: View {
                 .accessibilityLabel("Email")
                 VStack(spacing: 12) {
                     if !email.isEmpty {
-                        SecureField("Enter your password)", text: $password)
+                        SecureField("Enter your password", text: $password)
                             .textInputAutocapitalization(.never)
                             .disableAutocorrection(true)
                             .padding(14)
@@ -191,7 +168,7 @@ struct CreateAccountView: View {
             // Social sign-in buttons
             VStack(spacing: 12) {
                 Button(action: {
-                    
+                    continueWithGoogle()
                 }) {
                     HStack {
                         Image("google_logo")
@@ -202,6 +179,7 @@ struct CreateAccountView: View {
                         Text("Continue with Google")
                             .font(.system(size: 15, weight: .medium))
                         Spacer()
+                        Color.clear.frame(width: 20)
                     }
                     .frame(height: 50)
                 }
@@ -225,9 +203,6 @@ struct CreateAccountView: View {
                 .buttonStyle(SecondaryButtonStyle())
             }
             .padding(.horizontal, 24)
-            
-            Spacer()
-            
             // Terms text
             VStack(spacing: 6) {
                 Text("By clicking continue, you agree to our Terms of Service and Privacy Policy")
@@ -243,7 +218,18 @@ struct CreateAccountView: View {
         .onChange(of: email) { _, newValue in
             emailIsThere = !newValue.isEmpty
         }
+        .onOpenURL { url in
+            #if canImport(GoogleSignIn)
+            _ = GIDSignIn.sharedInstance.handle(url)
+            #endif
+        }
+        .navigationDestination(isPresented: $LoggedIn) {
+            HomePage()
+        }
     }
+    }
+    
+   
     
     // MARK: - Actions
     
@@ -255,6 +241,7 @@ struct CreateAccountView: View {
             // Simulate network delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 isLoading = false
+                LoggedIn = true
                 // proceed to next step (OTP / password / profile)
                 // For now, just print
                 print("Continue with email: \(email)")
@@ -263,25 +250,43 @@ struct CreateAccountView: View {
             showEmailError = true
         }
     }
-    
+        
+    public func continueWithGoogle() {
+        #if canImport(GoogleSignIn) && canImport(UIKit)
+        guard let rootScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = rootScene.keyWindow?.rootViewController else {
+            print("Unable to get rootViewController for Google Sign-In")
+            return
+        }
+        GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { result, error in
+            if let error = error {
+                print("Google Sign-In failed: \(error.localizedDescription)")
+                return
+            }
+            print("Google Sign-In succeeded")
+        }
+        #else
+        print("Google Sign-In not available on this platform or GoogleSignIn not linked.")
+        #endif
+    }
+
     private func isValidEmail(_ string: String) -> Bool {
         // Very simple regex check (sufficient for UI demo)
         let regex = "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$"
         return NSPredicate(format: "SELF MATCHES[c] %@", regex).evaluate(with: string)
     }
-}
-func isValidPassword(_ password: String) -> Bool {
-
-    let passwordRegex = "^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,16}$"
     
-    return NSPredicate(format: "SELF MATCHES %@", passwordRegex)
-        .evaluate(with: password)
+    public func isValidPassword(_ password: String) -> Bool {
+        let passwordRegex = "^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,100}$"
+        return NSPredicate(format: "SELF MATCHES %@", passwordRegex)
+            .evaluate(with: password)
+    }
 }
 
 // MARK: - Button Styles
 
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+public struct PrimaryButtonStyle: ButtonStyle {
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(.white)
             .background(
@@ -294,8 +299,8 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+public struct SecondaryButtonStyle: ButtonStyle {
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(.primary)
             .background(
