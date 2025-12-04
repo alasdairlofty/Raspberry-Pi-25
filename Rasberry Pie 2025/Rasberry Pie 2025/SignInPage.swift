@@ -14,6 +14,8 @@ import GoogleSignIn
 import Firebase
 #endif
 import FirebaseAuth
+import FirebaseFirestore
+import FirebaseCore
 
 struct SignIntoAccountView: View {
     @State public var emailSignin: String = ""
@@ -23,6 +25,7 @@ struct SignIntoAccountView: View {
     @State public var isLoadingSignin: Bool = false
     @State public var emailIsThereSignin: Bool = false
     @State public var LoggedIn: Bool = false
+    @AppStorage("LoggedIn2") var LoggedIn2: Bool = false
     var body: some View {
         NavigationStack {
             VStack {
@@ -230,39 +233,136 @@ struct SignIntoAccountView: View {
         }
     }
     
-    // MARK: - Actions
-    
-    private func attemptContinue() {
-        // Basic email validation
-        if isValidEmail(emailSignin) && isValidPassword(passwordSignin) && passwordSignin == passwordConfirmationSignin {
-            showEmailErrorSignin = false
-            isLoadingSignin = true
-            // Simulate network delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                isLoadingSignin = false
-                LoggedIn = true
-                // proceed to next step (OTP / password / profile)
-                // For now, just print
-                print("Continue with email: \(emailSignin)")
-            }
-        } else {
+    func attemptContinue() {
+        // Validate fields locally first
+        guard isValidEmail(emailSignin),
+              isValidPassword(passwordSignin),
+              passwordSignin == passwordConfirmationSignin
+        else {
             showEmailErrorSignin = true
+            return
+        }
+
+        showEmailErrorSignin = false
+        isLoadingSignin = true
+
+        Auth.auth().signIn(withEmail: emailSignin, password: passwordSignin) { authResult, error in
+            isLoadingSignin = false
+
+            if let error = error {
+                print("Firebase sign in failed: \(error.localizedDescription)")
+                showEmailErrorSignin = true
+                return
+            }
+
+            print("Firebase sign in succeeded for: \(emailSignin)")
+            LoggedIn = true
+            LoggedIn2 = true
         }
     }
-    
-    public func continueWithGoogle() {
+    func continueWithGoogle() {
         #if canImport(GoogleSignIn) && canImport(UIKit)
         guard let rootScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootVC = rootScene.keyWindow?.rootViewController else {
             print("Unable to get rootViewController for Google Sign-In")
             return
         }
+
         GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { result, error in
             if let error = error {
                 print("Google Sign-In failed: \(error.localizedDescription)")
                 return
             }
-            print("Google Sign-In succeeded")
+
+            guard let user = result?.user,
+                  let idToken = user.idToken?.tokenString else {
+                print("Google Sign-In missing tokens")
+                return
+            }
+            let accessToken = user.accessToken.tokenString
+
+            let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
+
+            // Sign in to Firebase with Google credential
+            Auth.auth().signIn(with: credential) { authResult, error in
+                if let error = error {
+                    print("Firebase sign in with Google failed: \(error.localizedDescription)")
+                    return
+                }
+
+                // Success: user is now signed in to Firebase using Google
+                print("Firebase sign in with Google succeeded for: \(authResult?.user.email ?? "unknown email")")
+                
+                // Upsert Firestore user document (create if missing, update if exists)
+                let db = Firestore.firestore()
+                let uid = authResult?.user.uid ?? Auth.auth().currentUser?.uid ?? ""
+                if uid.isEmpty {
+                    print("Missing uid after Google sign-in")
+                    DispatchQueue.main.async {
+                        LoggedIn = true
+                        LoggedIn2 = true
+                    }
+                    return
+                }
+
+                let docRef = db.collection("users").document(uid)
+
+                // Prefer values from Firebase Auth user; fallback to Google profile if available
+                let email = authResult?.user.email
+                let displayName = authResult?.user.displayName
+                let photoURL = authResult?.user.photoURL?.absoluteString
+
+                var baseData: [String: Any] = [
+                    "uid": uid,
+                    "provider": "google",
+                    "lastSignIn": FieldValue.serverTimestamp()
+                ]
+                if let email = email { baseData["email"] = email }
+                if let displayName = displayName { baseData["displayName"] = displayName }
+                if let photoURL = photoURL { baseData["photoURL"] = photoURL }
+
+                // First do a merge write; if the doc doesn't exist it will be created (without createdAt).
+                docRef.setData(baseData, merge: true) { setError in
+                    if let setError = setError {
+                        print("Merge write failed: \(setError.localizedDescription)")
+                        DispatchQueue.main.async {
+                            LoggedIn = true
+                            LoggedIn2 = true
+                        }
+                        return
+                    }
+
+                    // Ensure createdAt is set once, using a transaction that only sets it if absent.
+                    db.runTransaction({ (transaction, errorPointer) -> Any? in
+                        do {
+                            let snapshot = try transaction.getDocument(docRef)
+                            if snapshot.exists {
+                                if snapshot.get("createdAt") == nil {
+                                    transaction.updateData(["createdAt": FieldValue.serverTimestamp()], forDocument: docRef)
+                                }
+                            } else {
+                                var newData = baseData
+                                newData["createdAt"] = FieldValue.serverTimestamp()
+                                transaction.setData(newData, forDocument: docRef)
+                            }
+                        } catch {
+                            // If we can't read, still proceed—doc already has at least the merge data.
+                        }
+                        return nil
+                    }) { (_, txError) in
+                        if let txError = txError {
+                            print("Transaction to set createdAt failed: \(txError.localizedDescription)")
+                        } else {
+                            print("User doc upserted for uid: \(uid)")
+                        }
+                        DispatchQueue.main.async {
+                            LoggedIn = true
+                            LoggedIn2 = true
+                        }
+                    }
+                }
+                return
+            }
         }
         #else
         print("Google Sign-In not available on this platform or GoogleSignIn not linked.")
@@ -274,9 +374,10 @@ struct SignIntoAccountView: View {
         let regex = "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$"
         return NSPredicate(format: "SELF MATCHES[c] %@", regex).evaluate(with: string)
     }
-    public func isValidPassword(_ password: String) -> Bool {
+    func isValidPassword(_ password: String) -> Bool {
         let passwordRegex = "^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,100}$"
         return NSPredicate(format: "SELF MATCHES %@", passwordRegex)
             .evaluate(with: password)
     }
 }
+

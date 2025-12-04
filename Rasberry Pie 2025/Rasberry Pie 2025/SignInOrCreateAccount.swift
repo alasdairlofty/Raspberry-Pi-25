@@ -17,6 +17,8 @@ import Firebase
 struct AccountOrNotView: View {
     @State private var showSignIn: Bool = false
     @State private var showCreateAccount: Bool = false
+    @AppStorage("LoggedIn2") var LoggedIn2: Bool = false
+    
     
     var body: some View {
         
@@ -68,6 +70,7 @@ struct AccountOrNotView: View {
                             .font(.system(size: 15, weight: .medium))
                         Spacer()
                         Color.clear.frame(width: 20)
+                       
                     }
                     .frame(height: 50)
                 }
@@ -107,9 +110,12 @@ struct AccountOrNotView: View {
         }
         .sheet(isPresented: $showSignIn) {
             SignIntoAccountView()
+            
         }
         .sheet(isPresented: $showCreateAccount) {
             CreateAccountView()
+            
         }
     }
 }
+
